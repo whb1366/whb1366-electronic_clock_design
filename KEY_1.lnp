@@ -1,0 +1,4 @@
+"ex4.obj",
+"STARTUP.obj" 
+TO "KEY_1" 
+RAMSIZE(256) 

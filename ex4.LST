@@ -1,0 +1,572 @@
+C51 COMPILER V9.57.0.0   EX4                                                               09/12/2024 23:27:17 PAGE 1   
+
+
+C51 COMPILER V9.57.0.0, COMPILATION OF MODULE EX4
+OBJECT MODULE PLACED IN ex4.OBJ
+COMPILER INVOKED BY: E:\Keil_v5\C51\BIN\C51.EXE ex4.c LARGE OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          /*******************************************************************************  
+   2          * ÎÄ¼þÃû³Æ£º°´¼ü¿ØÖÆÊµÑé
+   3          * ÊµÑéÄ¿µÄ£º1.ÕÆÎÕµ¥Æ¬»úIO¿Ú²Ù×÷µÄ»ù±¾·½·¨
+   4          *           2.ÕÆÎÕC51¹Ø¼ü×Ö"sbit"µÄÓÃ·¨
+   5          *           2.ÕÆÎÕµ¥Æ¬»ú³£¼ûÍâÎ§Çý¶¯µçÂ·µÄÉè¼Æ·½·¨ 
+   6          * ³ÌÐòËµÃ÷£ºÊ¹ÓÃ³ÌÐòÇ°£¬½«ÌøÏßJ2µ÷ÕûÎªBTNÄ£Ê½
+   7          * Ó²¼þ»·¾³£ºIAP15F2K61S2@11.0592MHz
+   8          * ÈÕÆÚ°æ±¾£º2012-9-3/V1.0a 
+   9          *******************************************************************************/
+  10          
+  11          #include "reg52.h"  //¶¨Òå51µ¥Æ¬»úÌØÊâ¹¦ÄÜ¼Ä´æÆ÷
+  12          #include "absacc.h"
+  13          #define u8 unsigned char
+  14          #define u16 unsigned short int
+  15          
+  16          /** ¶ÀÁ¢°´¼ü½Ó¿Ú */
+  17          sfr P4   = 0xC0;
+  18          sbit P42 = P4^2;
+  19          sbit P44 = P4^4;
+  20          sbit buzz  = P0^6;  //¶Ë¿ÚP06¿ØÖÆ·äÃùÆ÷£¬ÕâÊÇÍ¨¹ý²é¿´Ô­ÀíÍ¼µÃ³öÀ´µÄ
+  21          sbit motor  = P0^5;
+  22          bit key_re = 0;
+  23          bit add_flag = 0;         //×Ô¼Ó1±êÖ¾Î»
+  24          bit subtract_flag = 0;    //×Ô¼õ1±êÖ¾Î»
+  25          bit naozhong_flag = 0;          //ÄÖÖÓ¿ªÆô±êÖ¾Î»
+  26          bit update_nz = 1;            //¸üÐÂÄÖÖÓ³õÊ¼ÖµµÄ±êÖ¾Î»£¬ÊÇÄÖÖÓ³õÊ¼Öµ£¬²»Òª¸ã´í£¬Ò²¾ÍÊÇÉèÖÃÄÖÖÓÊ±ËùÏÔÊ¾µÄ³õÊ¼Öµ
+  27          bit LED_nz = 0;           //µ±Ç°Ê±¼äµÈÓÚÄÖÖÓÊ±¼äÊ±£¬µãÁÁLEDµÄ±êÖ¾Î»
+  28          bit buffer_1 = 0;         //°´2µ÷ÕûÄÖÖÓÊ±¼ä£¬ÔÙ°´0È·¶¨ÄÖÖÓÊ±¼ä£¬ÇÒ°´0¿ÉÒÔÈÃÕý³£Ê±ÖÓ¼ÌÐøÔËÐÐ²¢ÏÔÊ¾£¬´ËÊ±buffer_
+             -1±äÁ¿»á±ä³É1£¬Ò²¾ÍÊÇËµ°´2µ÷ÕûÄÖÖÓºóÔÙ°´0µÄÇé¿öÏÂ£¬buffer_1±äÁ¿»á±ä³É1
+  29                                    //buffer_1±äÁ¿Ò²ÊÇÈ·¶¨ÄÖÖÓÊ±¼äµÄ±êÖ¾Î»
+  30          bit buffer_2 = 0;         //buffer_1ºÍbuffer_2ÊÇÅäºÏÊ¹ÓÃµÄ
+  31          sfr AUXR = 0x8e;
+  32          unsigned char bh = 0;
+  33          unsigned char Time[]={1,7,22,2,0,22,5,0}; //Ê±¼ä
+  34          unsigned char Time_shanshuo[]={0,0,22,0,0,22,0,0}; //ÓÃÀ´ÉÁË¸µÄÊ±¼ä
+  35          unsigned char Time_naozhong[]={0,0,22,0,0,22,0,0}; //ÉèÖÃÄÖÖÓµÄÊ±¼ä£¬±äÁ¿Time_naozhong¸üÐÂÖ®ºó»á¸³Öµ¸øTime
+             -_nz_buffer£¬ÔÙÓÉTime_nz_buffer¸³Öµ¸øTime_nz_finish
+  36                                                              //ÕâÀï½«±äÁ¿Time_nz_buffer×÷Îª»º³åÇøµÄÔ­ÒòÊÇ±äÁ¿Time_naozhong²»ÎÈ¶¨£¬ÓÐÁ½¸öµØ·½¶
+             -¼¶ÔËü½øÐÐÁËÐÞ¸Ä£¬Òò´ËÓÃÁíÒ»¸ö±äÁ¿»º´æÒ»ÏÂ
+  37          unsigned char Time_nz_buffer[]={0,0,22,0,0,22,0,0}; //»º³åÇø
+  38          unsigned char Time_nz_finish[]={0,0,22,0,0,22,0,0}; //ÄÖÖÓÉèÖÃÍê³ÉµÄÊ±¼ä
+  39          unsigned char Time_d[]={0,0,22,0,0,22,0,0}; //µ¹¼ÆÊ±Ê±¼ä
+  40          unsigned char Time_d_finish[]={0,0,22,0,0,22,0,0};  //µ¹¼ÆÊ±¹¦ÄÜÏÂÉèÖÃµÄÊ±¼ä
+  41          unsigned char counter_num = 0;
+  42          unsigned char counter_num_2 = 0;
+  43          short int counter_num_3 = 0;
+  44          unsigned char cnt_d = 0; //µ¹¼ÆÊ±¹¦ÄÜÖÐµÄ¼ÆÊýÆ÷
+  45          unsigned char key_value = 0;
+  46          unsigned char key_press = 0;
+  47          unsigned char shi = 0;
+  48          unsigned char fen = 0;
+  49          unsigned char miao = 0;
+  50          unsigned char shi_n = 0;
+  51          unsigned char fen_n = 0;
+  52          unsigned char miao_n = 0;
+C51 COMPILER V9.57.0.0   EX4                                                               09/12/2024 23:27:17 PAGE 2   
+
+  53          unsigned char hour_d = 0;
+  54          unsigned char minute_d = 0;
+  55          unsigned char second_d = 0;
+  56          unsigned char gongneng = 0; //¹¦ÄÜ±êÖ¾Î»
+  57          unsigned char ss_xh = 2; //ÉÁË¸Î»£¬0´ú±íÐ¡Ê±ÉÁË¸£¬1´ú±í·ÖÖÓÉÁË¸£¬2´ú±íÃë±íÉÁË¸£¬3´ú±í²»ÉÁË¸
+  58          unsigned char nz_xh = 2;  //ÉèÖÃÄÖÖÓ¹¦ÄÜÏÂµÄÊ±¼äÉÁË¸Î»
+  59          unsigned char d_xh = 2; //ÉèÖÃµ¹¼ÆÊ±¹¦ÄÜÏÂµÄÊ±¼äÉÁË¸Î»
+  60          bit ss_diaplay_YN = 0; //ÉÁË¸×´Ì¬ÏÂÊÇÏÔÊ¾»¹ÊÇÏ¨ÃðµÄ±êÖ¾Î»
+  61          void Timer0_Init(void); //¶¨Ê±Æ÷0³õÊ¼»¯º¯Êý
+  62          void Timer0_Isr(void);  //¶¨Ê±Æ÷0ÖÐ¶Ïº¯Êý
+  63          void display(unsigned char* ptr);   //ÏÔÊ¾ÊýÂë¹Üº¯Êý
+  64          void cls_buzz(void); //¹Ø±ÕÍâÉè·äÃùÆ÷
+  65          void Time_proc(void); //Ê±¼ä´¦Àíº¯Êý
+  66          unsigned char read_keyboard(void); //¶ÁÈ¡¾ØÕó¼üÅÌ
+  67          void time_add(u8 number, u8* hour, u8* minute, u8* second);
+  68          void time_subtract(u8 number, u8* hour, u8* minute, u8* second);
+  69          void Time_proc_d(u8* hour, u8* minute, u8* second);   //µ¹¼ÆÊ±¹¦ÄÜÖÐµÄÊ±¼ä´¦Àíº¯Êý£¬Ò²¾ÍÊÇÃ¿¸ô1s¼õ1
+  70          
+  71          //¹²Ñô¼«ÊýÂë¹Ü        0     1    2    3    4    5    6    7    8    9    A    B    C    D    E    F    P  
+             -  U    Y    L   È«ÁÁ Ï¨Ãð  -
+  72          unsigned char smg[]={0xc0,0xf9,0xa4,0xb0,0x99,0x92,0x82,0xf8,0x80,0x90,0x88,0x83,0xc6,0xa1,0x86,0x8e,0x8c,
+             -0xc1,0x91,0x7c,0x00,0xff,0xbf};
+  73          
+  74          
+  75          //Ö÷º¯Êý
+  76          void main(void)
+  77          {    
+  78   1        shi = Time[0]*10+Time[1];
+  79   1        fen = Time[3]*10+Time[4];
+  80   1        miao = Time[6]*10+Time[7];
+  81   1        cls_buzz();
+  82   1        Timer0_Init();
+  83   1        EA = 1;
+  84   1        
+  85   1        
+  86   1        
+  87   1          while(1)
+  88   1          {
+  89   2            if(gongneng == 0) //Õý³£ÔËÐÐ///////////////////////////////////////////////////////////////////////////
+             -///////////////////////////////////////////////////
+  90   2            {
+  91   3              display(Time);
+  92   3            }
+  93   2            if(gongneng == 1)  //µ÷ÕûÊ±¼ä//////////////////////////////////////////////////////////////////////////
+             -////////////////////////////////////////////////////
+  94   2            {
+  95   3              if(ss_diaplay_YN)             //ÉÁË¸Çé¿öÏÂÓÐÁÁºÍÃðÁ½ÖÖ×´Ì¬£¬ss_diaplay_YNµÈÓÚ1Ê±±íÊ¾¡°ÁÁ¡±
+  96   3              {
+  97   4                Time_shanshuo[0] = Time[0]; Time_shanshuo[1] = Time[1];
+  98   4                Time_shanshuo[3] = Time[3]; Time_shanshuo[4] = Time[4];
+  99   4                Time_shanshuo[6] = Time[6]; Time_shanshuo[7] = Time[7];
+ 100   4              }
+ 101   3              else                          //ÉÁË¸Çé¿öÏÂÓÐÁÁºÍÃðÁ½ÖÖ×´Ì¬£¬ss_diaplay_YNµÈÓÚ0Ê±±íÊ¾¡°Ãð¡±
+ 102   3              {
+ 103   4                switch(ss_xh)
+ 104   4                {
+ 105   5                  case 0:Time_shanshuo[0] = 21; Time_shanshuo[1] = 21; break; //Êý×ésmgµÄµÚ21¸öÔªËØ±íÊ¾Ï¨Ãð£¬ss_xh == 
+             -0´ú±í¡°Ð¡Ê±¡±Êý×ÖÉÁË¸£¬ss_xhÊÇshanshuo_xuhaoµÄ¼òÐ´
+ 106   5                  case 1:Time_shanshuo[3] = 21; Time_shanshuo[4] = 21; break; //¡°·ÖÖÓ¡±Êý×ÖÉÁË¸
+ 107   5                  case 2:Time_shanshuo[6] = 21; Time_shanshuo[7] = 21; break; //¡°Ãë±í¡±Êý×ÖÉÁË¸
+ 108   5                }
+ 109   4              }
+C51 COMPILER V9.57.0.0   EX4                                                               09/12/2024 23:27:17 PAGE 3   
+
+ 110   3              display(Time_shanshuo);
+ 111   3              
+ 112   3              if(add_flag == 1)                       //Ê±¼äµÄÄ³Ò»Î»×Ô¼Ó1
+ 113   3              {
+ 114   4                add_flag = 0;
+ 115   4                time_add(ss_xh, &shi, &fen, &miao);
+ 116   4              }
+ 117   3              if(subtract_flag == 1)                      //Ê±¼äµÄÄ³Ò»Î»×Ô¼õ1
+ 118   3              {
+ 119   4                subtract_flag = 0;
+ 120   4                time_subtract(ss_xh, &shi, &fen, &miao);
+ 121   4              }
+ 122   3              shi>=10?(Time[0]=shi/10):(Time[0]=0);
+ 123   3              Time[1]=shi%10;
+ 124   3              fen>=10?(Time[3]=fen/10):(Time[3]=0);
+ 125   3              Time[4]=fen%10;
+ 126   3              miao>=10?(Time[6]=miao/10):(Time[6]=0);
+ 127   3              Time[7]=miao%10;
+ 128   3              
+ 129   3            }
+ 130   2            if(gongneng == 2) //ÄÖÖÓ¹¦ÄÜ///////////////////////////////////////////////////////////////////////////
+             -///////////////////////////////////////////////////
+ 131   2            {
+ 132   3              u8 cnt1 = 0;
+ 133   3              if(add_flag == 1)                       //Ê±¼äµÄÄ³Ò»Î»×Ô¼Ó1
+ 134   3              {
+ 135   4                add_flag = 0;
+ 136   4                time_add(nz_xh, &shi_n, &fen_n, &miao_n);
+ 137   4              }
+ 138   3              if(subtract_flag == 1)                      //Ê±¼äµÄÄ³Ò»Î»×Ô¼õ1
+ 139   3              {
+ 140   4                subtract_flag = 0;
+ 141   4                time_subtract(nz_xh, &shi_n, &fen_n, &miao_n);
+ 142   4              }
+ 143   3              shi_n>=10?(Time_naozhong[0]=shi_n/10):(Time_naozhong[0]=0);
+ 144   3              Time_naozhong[1]=shi_n%10;
+ 145   3              fen_n>=10?(Time_naozhong[3]=fen_n/10):(Time_naozhong[3]=0);
+ 146   3              Time_naozhong[4]=fen_n%10;
+ 147   3              miao_n>=10?(Time_naozhong[6]=miao_n/10):(Time_naozhong[6]=0);
+ 148   3              Time_naozhong[7]=miao_n%10;
+ 149   3              
+ 150   3              for(cnt1 = 0; cnt1<8; cnt1++)
+ 151   3                Time_nz_buffer[cnt1] = Time_naozhong[cnt1];
+ 152   3              
+ 153   3              if(~ss_diaplay_YN)                          //ÉÁË¸Çé¿öÏÂÓÐÁÁºÍÃðÁ½ÖÖ×´Ì¬£¬ss_diaplay_YNµÈÓÚ0Ê±±íÊ¾¡°Ãð¡±
+ 154   3              {
+ 155   4                switch(nz_xh)
+ 156   4                {
+ 157   5                  case 0:Time_naozhong[0] = 21; Time_naozhong[1] = 21; break; //Êý×ésmgµÄµÚ21¸öÔªËØ±íÊ¾Ï¨Ãð£¬ss_xh == 
+             -0´ú±í¡°Ð¡Ê±¡±Êý×ÖÉÁË¸£¬ss_xhÊÇshanshuo_xuhaoµÄ¼òÐ´
+ 158   5                  case 1:Time_naozhong[3] = 21; Time_naozhong[4] = 21; break; //¡°·ÖÖÓ¡±Êý×ÖÉÁË¸
+ 159   5                  case 2:Time_naozhong[6] = 21; Time_naozhong[7] = 21; break; //¡°Ãë±í¡±Êý×ÖÉÁË¸
+ 160   5                }
+ 161   4              }
+ 162   3              display(Time_naozhong);
+ 163   3            }
+ 164   2            if(gongneng == 3) //µ¹¼ÆÊ±ÉèÖÃ¹¦ÄÜ
+ 165   2            {
+ 166   3              u8 cnt1 = 0;
+ 167   3              if(add_flag == 1)                       //Ê±¼äµÄÄ³Ò»Î»×Ô¼Ó1
+ 168   3              {
+ 169   4                add_flag = 0;
+C51 COMPILER V9.57.0.0   EX4                                                               09/12/2024 23:27:17 PAGE 4   
+
+ 170   4                time_add(d_xh, &hour_d, &minute_d, &second_d);
+ 171   4              }
+ 172   3              if(subtract_flag == 1)                      //Ê±¼äµÄÄ³Ò»Î»×Ô¼õ1
+ 173   3              {
+ 174   4                subtract_flag = 0;
+ 175   4                time_subtract(d_xh, &hour_d, &minute_d, &second_d);
+ 176   4              }
+ 177   3              hour_d>=10?(Time_d[0]=hour_d/10):(Time_d[0]=0);
+ 178   3              Time_d[1]=hour_d%10;
+ 179   3              minute_d>=10?(Time_d[3]=minute_d/10):(Time_d[3]=0);
+ 180   3              Time_d[4]=minute_d%10;
+ 181   3              second_d>=10?(Time_d[6]=second_d/10):(Time_d[6]=0);
+ 182   3              Time_d[7]=second_d%10;
+ 183   3              
+ 184   3              for(cnt1 = 0; cnt1<8; cnt1++)
+ 185   3                Time_d_finish[cnt1] = Time_d[cnt1];
+ 186   3              
+ 187   3              if(~ss_diaplay_YN)                          //ÉÁË¸Çé¿öÏÂÓÐÁÁºÍÃðÁ½ÖÖ×´Ì¬£¬ss_diaplay_YNµÈÓÚ0Ê±±íÊ¾¡°Ãð¡±
+ 188   3              {
+ 189   4                switch(d_xh)
+ 190   4                {
+ 191   5                  case 0:Time_d[0] = 21; Time_d[1] = 21; break; //Êý×ésmgµÄµÚ21¸öÔªËØ±íÊ¾Ï¨Ãð£¬ss_xh == 0´ú±í¡°Ð¡Ê±¡±Ê
+             -ý×ÖÉÁË¸£¬ss_xhÊÇshanshuo_xuhaoµÄ¼òÐ´
+ 192   5                  case 1:Time_d[3] = 21; Time_d[4] = 21; break; //¡°·ÖÖÓ¡±Êý×ÖÉÁË¸
+ 193   5                  case 2:Time_d[6] = 21; Time_d[7] = 21; break; //¡°Ãë±í¡±Êý×ÖÉÁË¸
+ 194   5                }
+ 195   4              }
+ 196   3              display(Time_d);
+ 197   3            }
+ 198   2            if(gongneng == 7) //µ¹¼ÆÊ±¿ªÊ¼¹¦ÄÜ
+ 199   2            {
+ 200   3              display(Time_d_finish);
+ 201   3            }
+ 202   2          }
+ 203   1      }
+ 204          
+ 205          void Timer0_Isr(void) interrupt 1 //Ã¿10msÖÐ¶ÏÒ»´Î
+ 206          {
+ 207   1        unsigned char key_temp = read_keyboard(); //Ã¿10msÉ¨ÃèÒ»´Î¼üÅÌ
+ 208   1        if(key_temp == 0) //°´0´ú±í¹¦ÄÜ0£¬Ò²¾ÍÊÇÊ±ÖÓÕý³£ÔËÐÐ¹¦ÄÜ
+ 209   1        {
+ 210   2          gongneng = 0;
+ 211   2          update_nz = 1;
+ 212   2          if(buffer_2)
+ 213   2          {
+ 214   3            unsigned char buffer_3 = 0;   //¾Ö²¿±äÁ¿µÄÉùÃ÷±ØÐëÔÚÓï¾äÌåµÄ¿ªÍ·
+ 215   3            buffer_2 = 0;
+ 216   3            buffer_1 = 1;   //Í¨¹ýbuffer_1ºÍbuffer_2À´È·¶¨ÄÖÖÓÊ±¼äÊÇ·ñÉèÖÃÍê³É£¬»»¾ä»°Ëµ£¬ÏëÒª½«ÄÖÖÓÊ±¼äÍêÈ«È·¶¨ÏÂÀ´
+             -±ØÐëÏÈ°´2ÔÙ°´0£¬ÔÚ°´2ºÍ°´0Ö®¼ä¿ÉÒÔÍ¨¹ý°´5ºÍ9µ÷ÕûÄÖÖÓÊ±¼ä
+ 217   3            for(buffer_3 = 0;buffer_3<8; buffer_3++)
+ 218   3              Time_nz_finish[buffer_3] = Time_nz_buffer[buffer_3];
+ 219   3          }
+ 220   2        }
+ 221   1        if(key_temp == 1) //°´1´ú±í¹¦ÄÜ1£¬Ò²¾ÍÊÇµ÷ÕûÊ±¼ä¹¦ÄÜ
+ 222   1        {
+ 223   2          unsigned char buffer = 0;
+ 224   2          for(buffer = 0;buffer<8; buffer++)
+ 225   2            Time_shanshuo[buffer] = Time[buffer];
+ 226   2          gongneng = 1;
+ 227   2          switch(ss_xh)
+ 228   2          {
+ 229   3            case 0:ss_xh ++;break;
+C51 COMPILER V9.57.0.0   EX4                                                               09/12/2024 23:27:17 PAGE 5   
+
+ 230   3            case 1:ss_xh ++;break;  //0»ò1µÄÇé¿öÏÂ¾ùÖ´ÐÐ×Ô¼Ó1µÄ³ÌÐò
+ 231   3            case 2:ss_xh = 0;break; //ss_xhÎª2µÄÇé¿öÏÂ±»¸³Öµ0£¬Ò²¾ÍÊÇËµ£¬±äÁ¿ss_xhµÄ±ä»¯¹ý³ÌÎª0¡¢1¡¢2¡¢0¡¢1¡¢2¡¢0¡¢
+             -1¡¢2
+ 232   3          }
+ 233   2        }
+ 234   1        if(key_temp == 2) //°´2´ú±íÄÖÖÓ¹¦ÄÜ
+ 235   1        {
+ 236   2          buffer_2 = 1;
+ 237   2          gongneng = 2;
+ 238   2          if (update_nz)
+ 239   2          {
+ 240   3            unsigned char buffer = 0;
+ 241   3            for(buffer = 0;buffer<8; buffer++)
+ 242   3              Time_naozhong[buffer] = Time[buffer];  //ÄÖÖÓ³õÊ¼»¯Ê±¼ä£¬Ã¿´Îµ÷ÕûÄÖÖÓÊ±¼äÊ±Ö»³õÊ¼»¯Ò»´Î
+ 243   3            update_nz = 0;
+ 244   3            shi_n = shi;
+ 245   3            fen_n = fen;
+ 246   3            miao_n = miao;
+ 247   3          }
+ 248   2          switch(nz_xh)     //µ÷ÕûÊýÂë¹ÜÉÁË¸µÄÎ»ÖÃ
+ 249   2          {
+ 250   3            case 0:nz_xh ++;break;  //ÕâÐÐ´úÂëÖ´ÐÐÖ®Ç°ÊÇµÚ0¸öÊýÂë¹Ü£¬×Ô¼Ó1Ö®ºóÏÔÊ¾±£ÏÕ
+ 251   3            case 1:nz_xh ++;break;  //0»ò1µÄÇé¿öÏÂ¾ùÖ´ÐÐ×Ô¼Ó1µÄ³ÌÐò
+ 252   3            case 2:nz_xh = 0;break; //ss_xhÎª2µÄÇé¿öÏÂ±»¸³Öµ0£¬Ò²¾ÍÊÇËµ£¬±äÁ¿ss_xhµÄ±ä»¯¹ý³ÌÎª0¡¢1¡¢2¡¢0¡¢1¡¢2¡¢0¡¢
+             -1¡¢2
+ 253   3          }
+ 254   2        }
+ 255   1        if(key_temp == 3) //°´3´ú±íµ¹¼ÆÊ±¹¦ÄÜ
+ 256   1        {
+ 257   2          gongneng = 3;
+ 258   2          switch(d_xh)
+ 259   2          {
+ 260   3            case 0:d_xh ++;break;
+ 261   3            case 1:d_xh ++;break;  //0»ò1µÄÇé¿öÏÂ¾ùÖ´ÐÐ×Ô¼Ó1µÄ³ÌÐò
+ 262   3            case 2:d_xh = 0;break;  //ss_xhÎª2µÄÇé¿öÏÂ±»¸³Öµ0£¬Ò²¾ÍÊÇËµ£¬±äÁ¿ss_xhµÄ±ä»¯¹ý³ÌÎª0¡¢1¡¢2¡¢0¡¢1¡¢2¡¢0¡¢1
+             -¡¢2
+ 263   3          }
+ 264   2        }
+ 265   1        if(key_temp == 5) //×Ô¼Ó1¹¦ÄÜ
+ 266   1          add_flag = 1;
+ 267   1        if(key_temp == 9) //×Ô¼õ1¹¦ÄÜ
+ 268   1          subtract_flag = 1;
+ 269   1        if(key_temp == 7) //µ¹¼ÆÊ±¿ªÊ¼¹¦ÄÜ
+ 270   1          gongneng = 7;
+ 271   1        
+ 272   1        
+ 273   1        if (gongneng == 0)          //Ã¿¼ä¸ô1000msÖ´ÐÐÒ»´ÎÃë±í×Ô¼Ó1µÄ³ÌÐò£¬Ò²¾ÍÊÇTime_procº¯Êý
+ 274   1        {
+ 275   2          counter_num++;
+ 276   2          if(counter_num == 100) //ÕâÀï²»ÄÜÉèÖÃÎª1000£¬ÒòÎªcounter_numÊÇunsigned charÀàÐÍ£¬×î´óÄÜ´ïµ½µÄÊýÖµÊÇ255
+ 277   2          {
+ 278   3            counter_num = 0;
+ 279   3            Time_proc();
+ 280   3          }
+ 281   2        }
+ 282   1        if (gongneng == 1)        //Ã¿¼ä¸ô500msÖ´ÐÐÒ»´ÎÊýÂë¹ÜÈ¡·´µÄ³ÌÐò£¬ÕâÒâÎ¶×ÅÊýÂë¹Ü´¦ÓÚ¡°ÉÁË¸¡±×´Ì¬£¬ÌáÐÑÓÃ»§µ÷Õû
+             -ÊýÖµ
+ 283   1        {
+ 284   2          counter_num_2 ++;
+ 285   2          if(counter_num_2 == 50)
+ 286   2          {
+ 287   3            counter_num_2 = 0;
+C51 COMPILER V9.57.0.0   EX4                                                               09/12/2024 23:27:17 PAGE 6   
+
+ 288   3            ss_diaplay_YN = ~ss_diaplay_YN;
+ 289   3          }
+ 290   2        }
+ 291   1        if (gongneng == 2)
+ 292   1        {
+ 293   2          counter_num++;
+ 294   2          if(counter_num == 100)   //ÉèÖÃÄÖÖÓÇé¿öÏÂ£¬Ô­À´µÄÊ±ÖÓ¼ÌÐø¼ÆÊ±£¬Ò²¾ÍÊÇ¹¦ÄÜ0ÏÂµÄÊ±ÖÓ¼ÌÐø¼ÆÊ±
+ 295   2          {
+ 296   3            counter_num = 0;
+ 297   3            Time_proc();
+ 298   3          }
+ 299   2          counter_num_2 ++;
+ 300   2          if(counter_num_2 == 50)   //Ã¿¼ä¸ô500msÖ´ÐÐÒ»´ÎÊýÂë¹ÜÈ¡·´µÄ³ÌÐò£¬ÕâÒâÎ¶×ÅÊýÂë¹Ü´¦ÓÚ¡°ÉÁË¸¡±×´Ì¬£¬ÌáÐÑÓÃ»§
+             -µ÷ÕûÊýÖµ
+ 301   2          {
+ 302   3            counter_num_2 = 0;
+ 303   3            ss_diaplay_YN = ~ss_diaplay_YN;
+ 304   3          }
+ 305   2        }
+ 306   1        if (gongneng == 3)
+ 307   1        {
+ 308   2          counter_num++;
+ 309   2          if(counter_num == 100)   //ÉèÖÃµ¹¼ÆÊ±Çé¿öÏÂ£¬Ô­À´µÄÊ±ÖÓ¼ÌÐø¼ÆÊ±£¬Ò²¾ÍÊÇ¹¦ÄÜ0ÏÂµÄÊ±ÖÓ¼ÌÐø¼ÆÊ±
+ 310   2          {
+ 311   3            counter_num = 0;
+ 312   3            Time_proc();
+ 313   3          }
+ 314   2          counter_num_2 ++;
+ 315   2          if(counter_num_2 == 50)   //Ã¿¼ä¸ô500msÖ´ÐÐÒ»´ÎÊýÂë¹ÜÈ¡·´µÄ³ÌÐò£¬ÕâÒâÎ¶×ÅÊýÂë¹Ü´¦ÓÚ¡°ÉÁË¸¡±×´Ì¬£¬ÌáÐÑÓÃ»§
+             -µ÷ÕûÊýÖµ
+ 316   2          {
+ 317   3            counter_num_2 = 0;
+ 318   3            ss_diaplay_YN = ~ss_diaplay_YN;
+ 319   3          }
+ 320   2        }
+ 321   1        if(LED_nz)                            //µ±Ç°Ê±¼äµÈÓÚÄÖÖÓÊ±¼äÊ±£¬µãÁÁLED
+ 322   1        {
+ 323   2          P2 = (P2&0x1F|0x80);
+ 324   2          P0 = 0x00;
+ 325   2          P2 &= 0x1F;
+ 326   2          counter_num_3 ++;
+ 327   2        }
+ 328   1        if (counter_num_3 == 500)     //LEDÁÁ5sÖ®ºó×Ô¶¯Ï¨Ãð
+ 329   1        {
+ 330   2          counter_num_3 = 0;
+ 331   2          P2 = (P2&0x1F|0x80);
+ 332   2          P0 = 0xff;                          //Ï¨ÃðLED
+ 333   2          P2 &= 0x1F;
+ 334   2          LED_nz = 0;
+ 335   2        }
+ 336   1        //ÅÐ¶Ïµ±Ç°Ê±¼äºÍÄÖÖÓÊ±¼äÊÇ·ñÏàµÈ
+ 337   1        if ((Time[0] == Time_nz_finish[0]) &&
+ 338   1            (Time[1] == Time_nz_finish[1]) &&
+ 339   1            (Time[3] == Time_nz_finish[3]) &&
+ 340   1            (Time[4] == Time_nz_finish[4]) &&
+ 341   1            (Time[6] == Time_nz_finish[6]) &&
+ 342   1            (Time[7] == Time_nz_finish[7]) &&
+ 343   1            (buffer_1 == 1))
+ 344   1        {
+ 345   2          buffer_1 = 0;
+ 346   2          LED_nz = 1;
+ 347   2        }
+C51 COMPILER V9.57.0.0   EX4                                                               09/12/2024 23:27:17 PAGE 7   
+
+ 348   1        if (gongneng == 7)
+ 349   1        {
+ 350   2          cnt_d ++;
+ 351   2          if (cnt_d == 100)
+ 352   2          {
+ 353   3            cnt_d = 0;
+ 354   3            if((Time_d_finish[0] != 0)||
+ 355   3                (Time_d_finish[1] != 0)||
+ 356   3                (Time_d_finish[3] != 0)||
+ 357   3                (Time_d_finish[4] != 0)||
+ 358   3                (Time_d_finish[6] != 0)||
+ 359   3                (Time_d_finish[7] != 0))
+ 360   3            {
+ 361   4              Time_proc_d(&hour_d, &minute_d, &second_d);
+ 362   4              hour_d>=10?(Time_d_finish[0]=hour_d/10):(Time_d_finish[0]=0);
+ 363   4              Time_d_finish[1]=hour_d%10;
+ 364   4              minute_d>=10?(Time_d_finish[3]=minute_d/10):(Time_d_finish[3]=0);
+ 365   4              Time_d_finish[4]=minute_d%10;
+ 366   4              second_d>=10?(Time_d_finish[6]=second_d/10):(Time_d_finish[6]=0);
+ 367   4              Time_d_finish[7]=second_d%10;
+ 368   4            }
+ 369   3          }
+ 370   2        }
+ 371   1      }
+ 372          
+ 373          void Timer0_Init(void)    //10ºÁÃë@11.0592MHz
+ 374          {
+ 375   1        AUXR &= 0x7F;     //¶¨Ê±Æ÷Ê±ÖÓ12TÄ£Ê½
+ 376   1        TMOD &= 0xF0;     //ÉèÖÃ¶¨Ê±Æ÷Ä£Ê½
+ 377   1        TL0 = 0x00;       //ÉèÖÃ¶¨Ê±³õÊ¼Öµ
+ 378   1        TH0 = 0xDC;       //ÉèÖÃ¶¨Ê±³õÊ¼Öµ
+ 379   1        TF0 = 0;        //Çå³ýTF0±êÖ¾
+ 380   1        TR0 = 1;        //¶¨Ê±Æ÷0¿ªÊ¼¼ÆÊ±
+ 381   1        ET0 = 1;        //Ê¹ÄÜ¶¨Ê±Æ÷0ÖÐ¶Ï
+ 382   1      }
+ 383          
+ 384          void display(unsigned char* ptr)
+ 385          { 
+ 386   1        //ÏûÒþ
+ 387   1        P2 = (P2&0x1F|0xe0);
+ 388   1        P0 = 0xff;
+ 389   1        P2 &= 0x1F;
+ 390   1        
+ 391   1        //Î»Ñ¡
+ 392   1        P0 = 1<<bh;
+ 393   1        P2 = (P2&0x1F|0xc0);
+ 394   1        P2 &= 0x1F;
+ 395   1        
+ 396   1        //¶ÎÑ¡
+ 397   1        P0 = smg[ptr[bh]];
+ 398   1        P2 = (P2&0x1F|0xe0);
+ 399   1        P2 &= 0x1F;
+ 400   1        
+ 401   1        //ÏÂÒ»Î»
+ 402   1        bh++;
+ 403   1        if(bh == 8)
+ 404   1          bh = 0;
+ 405   1        
+ 406   1      }
+ 407          void Time_proc(void) //Ê±¼ä´¦Àíº¯Êý
+ 408          {
+ 409   1        miao++;
+C51 COMPILER V9.57.0.0   EX4                                                               09/12/2024 23:27:17 PAGE 8   
+
+ 410   1        if(miao==60)
+ 411   1        {
+ 412   2          miao=0;
+ 413   2          fen++;
+ 414   2          if(fen==60)
+ 415   2          {
+ 416   3            fen=0;
+ 417   3            shi++;
+ 418   3            if (shi==24)
+ 419   3            {
+ 420   4              shi=0;
+ 421   4            }
+ 422   3          }
+ 423   2        }
+ 424   1        shi>=10?(Time[0]=shi/10):(Time[0]=0);
+ 425   1        Time[1]=shi%10;
+ 426   1        fen>=10?(Time[3]=fen/10):(Time[3]=0);
+ 427   1        Time[4]=fen%10;
+ 428   1        miao>=10?(Time[6]=miao/10):(Time[6]=0);
+ 429   1        Time[7]=miao%10;
+ 430   1      }
+ 431          
+ 432          void cls_buzz(void)
+ 433          {
+ 434   1        P2 = (P2&0x1F|0xA0);
+ 435   1        P0 = 0x00;
+ 436   1        P2 &= 0x1F;
+ 437   1      }
+ 438          //¶ÁÈ¡¾ØÕó¼üÅÌ¼üÖµ:×ª½Ó°åÖÐÊ¹ÓÃP42ºÍP44´úÌæ8051Òý½Å
+ 439          //Ë³ÐòÖÐµÄP36ºÍP37Òý½Å
+ 440          unsigned char read_keyboard(void)
+ 441          {
+ 442   1          static unsigned char col;
+ 443   1          
+ 444   1        //¼ì²â±»°´ÏÂµÄÁÐÊý
+ 445   1        P3 = 0xf0; P42 = 1; P44 = 1;  //P3±»¸³Öµ11110000£¬Èç¹ûÓÐ°´¼üÒÀÈ»´¦ÓÚ±»°´ÏÂµÄ×´Ì¬£¬ÄÇÃ´P3µÄÖµ»áË²¼ä¸Ä±ä
+ 446   1          if((P3 != 0xf0)||(P42 != 1)||(P44 != 1)) //ÕâÐÐ´úÂë±íÊ¾ÓÐ°´¼ü°´ÏÂ£¬ÕâÐÐ´úÂëÔ­À´ÊÇif((P3 != 0xf0)||(P42
+             - != 0)||(P44 != 0))£¬ÇÒÔ­À´µÄ´úÂëÒ²ÊÇ¿ÉÒÔÕý³£ÔËÐÐµÄ¡£
+ 447   1              key_press++;
+ 448   1        else
+ 449   1          key_press = 0;  //¶¶¶¯
+ 450   1          
+ 451   1          if(key_press == 3)
+ 452   1          {
+ 453   2          key_press = 0;
+ 454   2          key_re = 1;
+ 455   2          
+ 456   2          if(P44 == 0)      col = 1;
+ 457   2          if(P42 == 0)      col = 2;
+ 458   2          if((P3 & 0x20) == 0)  col = 3;
+ 459   2          if((P3 & 0x10) == 0)  col = 4;
+ 460   2              
+ 461   2            //¼ì²â±»°´ÏÂµÄÐÐÊý
+ 462   2              P3 = 0x0F; P42 = 0; P44 = 0; //ËùÓÐÐÐ¶¼Ã»ÓÐ±»°´ÏÂµÄ×´Ì¬£¬Ò²¾ÍÊÇP3µÄºó4Î»ÊÇ1111
+ 463   2      
+ 464   2          if((P3&0x01) == 0)  key_value = (col-1);
+ 465   2          if((P3&0x02) == 0)  key_value = (col+3);
+ 466   2          if((P3&0x04) == 0)  key_value = (col+7);
+ 467   2          if((P3&0x08) == 0)  key_value = (col+11);
+ 468   2          }
+ 469   1          
+ 470   1        //Á¬ÐøÈý´Î¼ì²âµ½°´¼ü±»°´ÏÂ£¬²¢ÇÒ¸Ã°´¼üÒÑ¾­ÊÍ·Å
+C51 COMPILER V9.57.0.0   EX4                                                               09/12/2024 23:27:17 PAGE 9   
+
+ 471   1        P3 = 0x0f; P42 = 0; P44 = 0;
+ 472   1        
+ 473   1          if(((key_re == 1) && (P3 == 0x0f))&&(P42 == 0)&&(P44 == 0))
+ 474   1          {
+ 475   2              key_re = 0;
+ 476   2              return key_value;
+ 477   2          }
+ 478   1          
+ 479   1          return 0xff;  //ÎÞ°´¼ü°´ÏÂ»ò±»°´ÏÂµÄ°´¼üÎ´±»ÊÍ·Å 
+ 480   1      }
+ 481          void time_add(u8 number, u8* hour, u8* minute, u8* second)
+ 482          {
+ 483   1        switch(number)
+ 484   1          {
+ 485   2            case 0:*hour = *hour + 1;if(*hour == 24) *hour = 0; break;
+ 486   2            case 1:*minute = *minute + 1;if(*minute == 60) *minute = 0; break;
+ 487   2            case 2:*second = *second + 1;if(*second == 60) *second = 0; break;
+ 488   2          }
+ 489   1      }
+ 490          void time_subtract(u8 number, u8* hour, u8* minute, u8* second)
+ 491          {
+ 492   1        switch(number)
+ 493   1          {
+ 494   2            case 0:if(*hour == 0) *hour=23; else *hour = *hour - 1; break;
+ 495   2            case 1:if(*minute == 0) *minute=59; else *minute = *minute - 1; break;
+ 496   2            case 2:if(*second == 0) *second=59; else *second = *second - 1; break;
+ 497   2          }
+ 498   1      }
+ 499          void Time_proc_d(u8* hour, u8* minute, u8* second)
+ 500          {
+ 501   1        if((*second) == 0)
+ 502   1        {
+ 503   2          *second = 59;
+ 504   2          if((*minute) == 0)
+ 505   2          {
+ 506   3            *minute = 59;
+ 507   3            *hour = *hour - 1;
+ 508   3          }
+ 509   2          else
+ 510   2            *minute = *minute - 1;
+ 511   2        }
+ 512   1        else
+ 513   1          *second = *second - 1;
+ 514   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2518    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =    101      31
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      9    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
